@@ -6,7 +6,6 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/index.js"
   },
-  
   "repository": {
     "type": "git",
     "url": "git+https://github.com/capiaris/BE_DA06.git"
@@ -20,6 +19,7 @@
   "homepage": "https://github.com/capiaris/BE_DA06#readme",
   "description": "",
   "dependencies": {
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "mongoose": "^9.7.0"
