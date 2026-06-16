@@ -1,48 +1,73 @@
-const Booking = require('../models/Booking');
+const bookingRepository = require('../repositories/bookingRepository');
 const timeHelper = require('../utils/timeHelper');
 
 const MAX_CITIZENS_PER_SLOT = 3;
 const MIN_HOURS_ADVANCE = 2;
 const MAX_DAYS_ADVANCE = 7;
 
-const validateBookingRules = (requestedTimeStr) => {
+const processNewBooking = async (bookingData) => {
+    const { name, phoneNumber, requestedTime } = bookingData;
+    
+    if (!name || !phoneNumber || !requestedTime) {
+        throw new Error("Thiếu thông tin bắt buộc");
+    }
+
+    const phoneRegex = /^[0-9]{9,11}$/;
+    if (!phoneRegex.test(phoneNumber.trim())) {
+        throw new Error("Số điện thoại không đúng định dạng");
+    }
+
+    const reqTime = new Date(requestedTime);
+    if (isNaN(reqTime.getTime())) {
+        throw new Error("Định dạng thời gian không hợp lệ");
+    }
+
     const now = new Date();
-    const requestedTime = new Date(requestedTimeStr);
+    if (reqTime <= now) {
+         throw new Error("Thời gian đặt lịch phải ở tương lai");
+    }
 
-    if (requestedTime <= now) return false;
+    const hoursDiff = timeHelper.getHoursDifference(reqTime, now);
+    if (hoursDiff < MIN_HOURS_ADVANCE) {
+        throw new Error("Phải đặt trước tối thiểu 2 giờ");
+    }
 
-    const hoursDiff = timeHelper.getHoursDifference(requestedTime, now);
-    if (hoursDiff < MIN_HOURS_ADVANCE) return false;
+    const daysDiff = timeHelper.getDaysDifference(reqTime, now);
+    if (daysDiff > MAX_DAYS_ADVANCE) {
+        throw new Error("Chỉ được đặt trước tối đa 7 ngày");
+    }
 
-    const daysDiff = timeHelper.getDaysDifference(requestedTime, now);
-    if (daysDiff > MAX_DAYS_ADVANCE) return false;
+    if (!timeHelper.isValidPrioritySlot(reqTime)) {
+        throw new Error("Chỉ hỗ trợ khung giờ :00 hoặc :30");
+    }
 
-    if (!timeHelper.isValidPrioritySlot(requestedTime)) return false;
+    const currentBookingsCount = await bookingRepository.countByRequestedTime(reqTime);
+    if (currentBookingsCount >= MAX_CITIZENS_PER_SLOT) {
+        throw new Error("Khung giờ ưu tiên này đã đầy");
+    }
 
-    return true;
+    return await bookingRepository.createBooking({
+        name: name.trim(),
+        phoneNumber: phoneNumber.trim(),
+        requestedTime: reqTime
+    });
 };
 
-const checkSlotAvailability = async (requestedTimeStr) => {
-    const requestedTime = new Date(requestedTimeStr);
-    
-    const currentBookingsCount = await Booking.countDocuments({
-        requestedTime: requestedTime
-    });
-    
-    return currentBookingsCount < MAX_CITIZENS_PER_SLOT;
-};
+const getBookingsByDate = async (dateStr) => {
+    if (!dateStr || isNaN(Date.parse(dateStr))) {
+        throw new Error("Tham số 'date' không hợp lệ");
+    }
 
-const createNewBooking = async (bookingData) => {
-    const booking = new Booking({
-        name: bookingData.name.trim(),
-        phoneNumber: bookingData.phoneNumber.trim(),
-        requestedTime: new Date(bookingData.requestedTime)
-    });
-    return await booking.save();
+    const startOfDay = new Date(dateStr);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(dateStr);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return await bookingRepository.getBookingsByDateRange(startOfDay, endOfDay);
 };
 
 module.exports = {
-    validateBookingRules,
-    checkSlotAvailability,
-    createNewBooking
+    processNewBooking,
+    getBookingsByDate
 };
